@@ -10,25 +10,19 @@ CONFIG -= app_bundle
 # deprecated API in order to know how to port your code away from it.
 DEFINES += QT_DEPRECATED_WARNINGS
 
-linux {
-    !contains(QMAKE_HOST.arch, arm.*):{
-        INCLUDEPATH += $$OUT_PWD/../Common ../Common ../3rdparty/NutClient/src
-        LIBS += -L$$OUT_PWD/../3rdparty/NutClient
-    }
-}
-
-LIBS += -lNutClient
-
-include( ../Common/Common.pri )
-
 # You can also make your code fail to compile if it uses deprecated APIs.
 # In order to do so, uncomment the following line.
 # You can also select to disable deprecated APIs only up to a certain version of Qt.
 #DEFINES += QT_DISABLE_DEPRECATED_BEFORE=0x060000    # disables all the APIs deprecated before Qt 6.0.0
 
-SOURCES += *.cpp \
+include( ../3rdparty/3rdparty.pri )
+include( ../Common/Common.pri )
 
-HEADERS += *.h \
+LIBS += -lNutClient
+
+SOURCES += *.cpp
+
+HEADERS += *.h
 
 # Default rules for deployment.
 linux {
