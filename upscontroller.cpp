@@ -11,8 +11,18 @@ UpsController::UpsController(QObject *parent) :
 {
 
 #ifdef UPS_ENABLE
-    m_nutClient = new nut::TcpClient("localhost", 3493);
-    m_nutClient->authenticate("admin", "admin");
+    try {
+        m_nutClient = new nut::TcpClient("localhost", 3493);
+    } catch (nut::NutException e) {
+        qWarning() << "Nut driver error while setting UPS up. Details: " << QString::fromStdString(e.str());
+    }
+    try {
+        m_nutClient->authenticate("admin", "admin");
+    } catch (nut::NutException e) {
+        qWarning() << "Nut driver error while setting UPS up. Details: " << QString::fromStdString(e.str());
+    }
+
+
 #endif
     connect(&m_pollSaiStatusTimer, &QTimer::timeout, this, &UpsController::sendUpsCommand);
     m_pollSaiStatusTimer.start(1000);
