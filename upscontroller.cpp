@@ -14,18 +14,14 @@ UpsController::UpsController(QObject *parent) :
     try {
         m_nutClient = new nut::TcpClient("localhost", 3493);
     } catch (nut::NutException e) {
-        qWarning() << "Nut driver error while setting UPS up. Details: " << QString::fromStdString(e.str());
-        QTimer::singleShot(5000, [=]() {
-            m_nutClient = new nut::TcpClient("localhost", 3493);
-        });
+        qWarning() << "Nut driver error while new class. Details: " << QString::fromStdString(e.str());
     }
     try {
         m_nutClient->authenticate("admin", "admin");
     } catch (nut::NutException e) {
-        qWarning() << "Nut driver error while setting UPS up. Details: " << QString::fromStdString(e.str());
-        QTimer::singleShot(5000, [=]() {
-            m_nutClient->authenticate("admin", "admin");
-        });
+        qWarning() << "Nut driver error while authenticate. Details: " << QString::fromStdString(e.str());
+        m_nutClient->logout();
+        m_nutClient->authenticate("admin", "admin");
     }
 
 #endif
