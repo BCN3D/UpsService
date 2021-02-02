@@ -19,7 +19,6 @@ UpsController::UpsController(QObject *parent) :
             connectionDone = true;
         } catch (nut::NutException e) {
             qWarning() << "Nut driver error while new class. Details: " << QString::fromStdString(e.str());
-            delete m_nutClient;
             connectionDone = false;
         }
         if (connectionDone) {
@@ -30,8 +29,6 @@ UpsController::UpsController(QObject *parent) :
                 qWarning() << "Nut driver error while authenticate. Details: " << QString::fromStdString(e.str());
                 m_nutClient->logout();
                 connectionDone = false;
-                if (m_nutClient != nullptr)
-                    delete m_nutClient;
             }
         }
     }
