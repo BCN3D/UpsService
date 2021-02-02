@@ -11,17 +11,29 @@ UpsController::UpsController(QObject *parent) :
 {
 
 #ifdef UPS_ENABLE
-    try {
-        m_nutClient = new nut::TcpClient("localhost", 3493);
-    } catch (nut::NutException e) {
-        qWarning() << "Nut driver error while new class. Details: " << QString::fromStdString(e.str());
-    }
-    try {
-        m_nutClient->authenticate("admin", "admin");
-    } catch (nut::NutException e) {
-        qWarning() << "Nut driver error while authenticate. Details: " << QString::fromStdString(e.str());
-        m_nutClient->logout();
-        m_nutClient->authenticate("admin", "admin");
+    bool connectionDone = false;
+    while (!connectionDone)
+    {
+        try {
+            m_nutClient = new nut::TcpClient("localhost", 3493);
+            connectionDone = true;
+        } catch (nut::NutException e) {
+            qWarning() << "Nut driver error while new class. Details: " << QString::fromStdString(e.str());
+            delete m_nutClient;
+            connectionDone = false;
+        }
+        if (connectionDone) {
+            try {
+                m_nutClient->authenticate("admin", "admin");
+                connectionDone = true;
+            } catch (nut::NutException e) {
+                qWarning() << "Nut driver error while authenticate. Details: " << QString::fromStdString(e.str());
+                m_nutClient->logout();
+                connectionDone = false;
+                if (m_nutClient != nullptr)
+                    delete m_nutClient;
+            }
+        }
     }
 
 #endif
