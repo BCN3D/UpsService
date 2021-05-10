@@ -28,6 +28,7 @@ public slots:
 protected slots:
 
 protected:
+    void tryConnection();
 
 private:
     nut::Client* m_nutClient;
