@@ -11,7 +11,27 @@ UpsController::UpsController(QObject *parent) :
 {
 
 #ifdef UPS_ENABLE
-    tryConnection();
+    bool connectionDone = false;
+    while (!connectionDone)
+    {
+        try {
+            m_nutClient = new nut::TcpClient("localhost", 3493);
+            connectionDone = true;
+        } catch (nut::NutException e) {
+            qWarning() << "Nut driver error while new class. Details: " << QString::fromStdString(e.str());
+            connectionDone = false;
+        }
+        if (connectionDone) {
+            try {
+                m_nutClient->authenticate("admin", "admin");
+                connectionDone = true;
+            } catch (nut::NutException e) {
+                qWarning() << "Nut driver error while authenticate. Details: " << QString::fromStdString(e.str());
+                m_nutClient->logout();
+                connectionDone = false;
+            }
+        }
+    }
 
 #endif
     connect(&m_pollSaiStatusTimer, &QTimer::timeout, this, &UpsController::sendUpsCommand);
@@ -22,15 +42,23 @@ void UpsController::sendUpsCommand()
 {
     static bool waitingForUpsOnline = false;
     QString upsState = "";
-    QString deviceError = "";
 #ifdef UPS_ENABLE
     try {
         upsState = QString::fromStdString(m_nutClient->getDeviceVariableValue(upsDeviceName, "ups.status")[0]);
     } catch (nut::NutException e) {
         qWarning() << "Nut driver error while requesting ups data. Details: " << QString::fromStdString(e.str());
-        deviceError = QString::fromStdString(e.str());
-        if (deviceError == "DRIVER-NOT-CONNECTED")
-            tryConnection();
+        QProcess::execute("upsdrvctl start");
+        try {
+            m_nutClient = new nut::TcpClient("localhost", 3493);
+        } catch (nut::NutException e) {
+            qWarning() << "Nut driver error while new class. Details: " << QString::fromStdString(e.str());
+        }
+        try {
+            m_nutClient->authenticate("admin", "admin");
+        } catch (nut::NutException e) {
+            qWarning() << "Nut driver error while authenticate. Details: " << QString::fromStdString(e.str());
+            m_nutClient->logout();
+        }
         return;
     }
 
@@ -49,31 +77,4 @@ void UpsController::sendUpsCommand()
 #endif
     emit newUpsState(upsState);
 
-}
-
-void UpsController::tryConnection() {
-    bool connectionDone = false;
-    while (!connectionDone)
-    {
-        try {
-            m_nutClient = new nut::TcpClient("localhost", 3493);
-            connectionDone = true;
-        } catch (nut::NutException e) {
-            qWarning() << "Nut driver error while new class. Details: " << QString::fromStdString(e.str());
-            connectionDone = false;
-            delete m_nutClient;
-        }
-        if (connectionDone) {
-            try {
-                m_nutClient->authenticate("admin", "admin");
-                connectionDone = true;
-            } catch (nut::NutException e) {
-                qWarning() << "Nut driver error while authenticate. Details: " << QString::fromStdString(e.str());
-                m_nutClient->logout();
-                connectionDone = false;
-                if (m_nutClient != nullptr)
-                    delete m_nutClient;
-            }
-        }
-    }
 }
