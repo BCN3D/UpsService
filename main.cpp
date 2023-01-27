@@ -39,12 +39,15 @@ int main(int argc, char *argv[])
 
     QCoreApplication coreApplication(argc, argv);
 
-    QString configPath;
+    QString configPath, upsDeviceName;
     if(argc > 0) {
         configPath = argv[1];
     }
+    if(argc > 1) {
+        upsDeviceName = argv[2];
+    }
 
-    UpsService  upsService(configPath);
+    UpsService  upsService(configPath, upsDeviceName);
 
     QObject::connect(&coreApplication, SIGNAL(aboutToQuit()), &upsService, SLOT(handleQuitSignal()));
 
