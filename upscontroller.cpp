@@ -4,10 +4,9 @@
 #include <QDateTime>
 #include "upscontroller.h"
 
-const std::string upsDeviceName = "salicru";
-
-UpsController::UpsController(QObject *parent) :
-    QObject(parent)
+UpsController::UpsController(QObject *parent, const QString &upsDeviceName) :
+    QObject(parent),
+    upsDeviceName(upsDeviceName)
 {
 
 #ifdef UPS_ENABLE
@@ -44,21 +43,9 @@ void UpsController::sendUpsCommand()
     QString upsState = "";
 #ifdef UPS_ENABLE
     try {
-        upsState = QString::fromStdString(m_nutClient->getDeviceVariableValue(upsDeviceName, "ups.status")[0]);
+        upsState = QString::fromStdString(m_nutClient->getDeviceVariableValue(upsDeviceName.toStdString(), "ups.status")[0]);
     } catch (nut::NutException e) {
         qWarning() << "Nut driver error while requesting ups data. Details: " << QString::fromStdString(e.str());
-        QProcess::execute("upsdrvctl start");
-        try {
-            m_nutClient = new nut::TcpClient("localhost", 3493);
-        } catch (nut::NutException e) {
-            qWarning() << "Nut driver error while new class. Details: " << QString::fromStdString(e.str());
-        }
-        try {
-            m_nutClient->authenticate("admin", "admin");
-        } catch (nut::NutException e) {
-            qWarning() << "Nut driver error while authenticate. Details: " << QString::fromStdString(e.str());
-            m_nutClient->logout();
-        }
         return;
     }
 
@@ -66,7 +53,7 @@ void UpsController::sendUpsCommand()
 
     if (upsState.contains("BYPASS") && !waitingForUpsOnline) {
         try {
-            m_nutClient->executeDeviceCommand(upsDeviceName, "load.on"); // Be sure that the UPS is online mode!
+            m_nutClient->executeDeviceCommand(upsDeviceName.toStdString(), "load.on"); // Be sure that the UPS is online mode!
             waitingForUpsOnline = true;
         } catch (nut::NutException e) {
             qWarning() << "Nut driver error while setting UPS online mode. Details: " << QString::fromStdString(e.str());

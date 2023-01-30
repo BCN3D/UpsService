@@ -12,7 +12,7 @@ class UpsService : public SigmaService
 {
     Q_OBJECT
 public:
-    explicit UpsService(const QString& configPath, QObject *parent = nullptr);
+    explicit UpsService(const QString& configPath, const QString &upsDeviceName, QObject *parent = nullptr);
 
 signals:
     void newUpsState(const QString upsState);
@@ -23,6 +23,5 @@ public slots:
 protected:
     UpsServiceSettings* m_upsServiceSettings;
     UpsController* m_upsController;
-
 };
 #endif // UPSSERVICE_H

@@ -17,7 +17,7 @@ class UpsController : public QObject
 {
     Q_OBJECT
 public:
-    explicit UpsController(QObject *parent = nullptr);
+    UpsController(QObject *parent = nullptr, const QString &upsDeviceName = "salicru");
 
 signals:
     void newUpsState(const QString& upsState);
@@ -28,11 +28,11 @@ public slots:
 protected slots:
 
 protected:
-    void tryConnection();
 
 private:
     nut::Client* m_nutClient;
     QTimer m_pollSaiStatusTimer;
+    QString upsDeviceName;
 };
 
 #endif // UPSCONTROLLER_H

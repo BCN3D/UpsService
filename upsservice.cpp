@@ -5,7 +5,7 @@
 
 #include "upsservice.h"
 
-UpsService::UpsService(const QString& configPath, QObject *parent) :
+UpsService::UpsService(const QString& configPath, const QString &upsDeviceName, QObject *parent) :
     SigmaService("UpsService", configPath, new UpsServiceSettings, parent)
 {
 #ifdef __arm__
@@ -16,7 +16,14 @@ UpsService::UpsService(const QString& configPath, QObject *parent) :
 
     this->m_upsServiceSettings = dynamic_cast<UpsServiceSettings*>(this->serviceSettings());
 
-    this->m_upsController = new UpsController(this);
+    if(upsDeviceName != nullptr)
+    {
+        this->m_upsController = new UpsController(this, upsDeviceName);
+    }
+    else
+    {
+        this->m_upsController = new UpsController(this);
+    }
 
     // Forward driver signals
 
