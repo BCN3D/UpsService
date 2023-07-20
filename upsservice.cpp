@@ -4,6 +4,7 @@
 #include <QUuid>
 
 #include "upsservice.h"
+#include "upsservice_interface.h"
 
 UpsService::UpsService(const QString& configPath, const QString &upsDeviceName, QObject *parent) :
     SigmaService("UpsService", configPath, new UpsServiceSettings, parent)

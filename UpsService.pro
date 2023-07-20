@@ -1,5 +1,5 @@
 QT -= gui
-QT += serialport dbus jsonserializer network
+QT += serialport serialbus dbus jsonserializer network
 
 CONFIG += c++17 console
 CONFIG -= app_bundle
