@@ -9,9 +9,34 @@
 #include <QFileSystemWatcher>
 
 #include "nutclient.h"
-#include "serialmanager/serialportwatcher.h"
+//#include "serialmanager/serialportwatcher.h"
+#include <QModbusRtuSerialMaster>
+#include <QModbusDataUnit>
 
 #define UPS_ENABLE
+
+#define MAX_CONNECTIONS_TRIED 3
+#define NEXT_CONNECTION_WAIT_SECS 1
+#define MODBUS_SLAVE_ID 1
+
+#define MB_SLAVE = 0x01
+#define MB_PORT = "/dev/ttyUSB0"
+
+#define MB_REG_ALARM    5
+#define MB_REG_BATTERY 64
+#define MB_REG_ONLINE  730
+
+#define MB_ALARM_AC_BIT 14
+
+
+
+class QModbusClient;
+class QModbusReply;
+
+enum UPS_CLIENT {
+    NUT = 1,
+    MODBUS
+};
 
 class UpsController : public QObject
 {
@@ -24,6 +49,7 @@ signals:
 
 public slots:
     void sendUpsCommand();
+    void MODBUSresponse();
 
 protected slots:
 
@@ -33,6 +59,16 @@ private:
     nut::Client* m_nutClient;
     QTimer m_pollSaiStatusTimer;
     QString upsDeviceName;
+
+    QModbusClient *modbusDevice = nullptr;
+
+    QModbusDataUnit readRequest() const;
+    QModbusDataUnit writeRequest() const;
+    QModbusReply *lastRequest = nullptr;
+    void OnlineRT3();
+
+    UPS_CLIENT ups_client;
+    UPS_CLIENT tryNextClient();
 };
 
 #endif // UPSCONTROLLER_H
