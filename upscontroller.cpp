@@ -4,8 +4,8 @@
 #include <QDateTime>
 #include <unistd.h>
 #include "qserialport.h"
+#include <qserialportinfo.h>
 #include "upscontroller.h"
-
 
 bool UpsController::getNextClient(){
 
@@ -13,6 +13,38 @@ bool UpsController::getNextClient(){
     size_t l = sizeof(available_clients) / sizeof(UPS_CLIENT);
     if (++current_client < l) {
         ok = true;
+    }
+    return ok;
+}
+
+bool UpsController::checkMODBUSPort() {
+
+    const auto serialPortInfos = QSerialPortInfo::availablePorts();
+    const size_t numports = serialPortInfos.length();
+    bool ok = false;
+
+    qDebug() << "checkMODBUSPort()";
+    if (numports > 1) {
+
+        for (const QSerialPortInfo &portInfo : serialPortInfos) {
+
+            qDebug() << "trying MODBUS on port " << portInfo.portName();
+            modbusDevice = new QModbusRtuSerialMaster(this);
+            modbusDevice->setConnectionParameter(QModbusDevice::SerialPortNameParameter, portInfo.portName());
+            modbusDevice->setConnectionParameter(QModbusDevice::SerialParityParameter, QSerialPort::MarkParity);
+            modbusDevice->setConnectionParameter(QModbusDevice::SerialBaudRateParameter, QSerialPort::Baud19200);
+            modbusDevice->setConnectionParameter(QModbusDevice::SerialDataBitsParameter, QSerialPort::Data8);
+            modbusDevice->setConnectionParameter(QModbusDevice::SerialStopBitsParameter, QSerialPort::OneStop);
+
+            if (modbusDevice->connectDevice()) {
+                if (onlineRT3()) { // Send the online command to SAI RT3 (in case it is in bypass)
+                    ok = true;
+                    break;
+                }
+            }
+        }
+    } else {
+        qDebug() << "No serial ports available";
     }
     return ok;
 }
@@ -40,38 +72,30 @@ UpsController::UpsController(QObject *parent, const QString &upsDeviceName) :
                 qDebug() << "Nut driver test: " << test;
                 if (test.contains("DRIVER-NOT-CONNECTED")) {
                     qWarning() << "Nut driver not connected";
-                    //connectionDone = false;
                 } else {
                     connectionDone = true;
                 }
             } catch (nut::NutException e) {
-                qWarning() << "Nut driver error while new class. Details: " << QString::fromStdString(e.str());
-                //connectionDone = false;
+                qWarning() << "Nut driver error: " << QString::fromStdString(e.str());
+                connectionDone = false;
             }
             if (connectionDone) {
                 try {
                     m_nutClient->authenticate("admin", "admin");
                     connectionDone = true;
                 } catch (nut::NutException e)                                               {
-                    qWarning() << "Nut driver error while authenticate. Details: " << QString::fromStdString(e.str());
+                    qWarning() << "Nut driver authentication error:  " << QString::fromStdString(e.str());
                     m_nutClient->logout();
-                    //connectionDone = false;
+                    connectionDone = false;
                 }
             }
             break;
 
         case MODBUS:
-            modbusDevice = new QModbusRtuSerialMaster(this);
-            modbusDevice->setConnectionParameter(QModbusDevice::SerialPortNameParameter, "/dev/ttyUSB0");
-            modbusDevice->setConnectionParameter(QModbusDevice::SerialParityParameter, QSerialPort::MarkParity);
-            modbusDevice->setConnectionParameter(QModbusDevice::SerialBaudRateParameter, QSerialPort::Baud19200);
-            modbusDevice->setConnectionParameter(QModbusDevice::SerialDataBitsParameter, QSerialPort::Data8);
-            modbusDevice->setConnectionParameter(QModbusDevice::SerialStopBitsParameter, QSerialPort::OneStop);
 
-            if (modbusDevice->connectDevice()) {
+            if (checkMODBUSPort()) {
                 qInfo("MODBUS client connected");
                 connectionDone = true;
-                OnlineRT3(); // Send the online command to SAI RT3 (in case it is in bypass)
             } else {
                 qWarning() << "MODBUS connection fail";
             }
@@ -87,7 +111,7 @@ UpsController::UpsController(QObject *parent, const QString &upsDeviceName) :
             if (tries++ > MAX_CONNECTIONS_TRIED) {
                 tries = 0;
                 if (!getNextClient()) {
-                    //connectionDone = false;
+                    qDebug("No more clients to test");
                     break;
                 }
                 qDebug() << "max tries reached, trying next client (" << ups_client << ")";
@@ -103,15 +127,21 @@ UpsController::UpsController(QObject *parent, const QString &upsDeviceName) :
 }
 
 
-void UpsController::OnlineRT3() {
+bool UpsController::onlineRT3() {
 
     qDebug() << "SAI RT3 Online";
+    bool ok = false;
+
     QModbusDataUnit pdu = QModbusDataUnit(QModbusDataUnit::RegisterType::HoldingRegisters, MB_REG_ONLINE, 0);
     auto *reply = modbusDevice->sendReadRequest(pdu, MODBUS_SLAVE_ID);
     while (!reply->isFinished()) { // wait for it...
         usleep(100000);
+        qDebug() << "waiting RT3 online...";
     }
+    ok = (reply->error() == QModbusDevice::NoError);
     delete reply;
+
+    return ok;
 }
 
 

@@ -62,16 +62,18 @@ private:
     QString upsDeviceName;
 
     QModbusClient *modbusDevice = nullptr;
-
     QModbusDataUnit readRequest() const;
     QModbusDataUnit writeRequest() const;
     QModbusReply *lastRequest = nullptr;
-    void OnlineRT3();
 
     UPS_CLIENT available_clients[2] = { UPS_CLIENT::NUT, UPS_CLIENT::MODBUS };
     UPS_CLIENT ups_client;
     size_t current_client;
+
     bool getNextClient();
+    bool checkMODBUSPort();
+    bool onlineRT3();
+
 };
 
 #endif // UPSCONTROLLER_H
