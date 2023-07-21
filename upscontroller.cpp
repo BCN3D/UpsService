@@ -79,20 +79,11 @@ UpsController::UpsController(QObject *parent, const QString &upsDeviceName) :
                     qWarning() << "Nut driver not connected";
                 } else {
                     qInfo("NUT client connected");
+                    m_nutClient->authenticate("admin", "admin");
                     connectionDone = true;
                 }
             } catch (nut::NutException e) {
                 qWarning() << "Nut driver error: " << QString::fromStdString(e.str());
-            }
-            if (connectionDone) {
-                try {
-                    m_nutClient->authenticate("admin", "admin");
-                    connectionDone = true;
-                } catch (nut::NutException e)                                               {
-                    qWarning() << "Nut driver authentication error:  " << QString::fromStdString(e.str());
-                    m_nutClient->logout();
-                    connectionDone = false;
-                }
             }
             break;
 
@@ -112,7 +103,7 @@ UpsController::UpsController(QObject *parent, const QString &upsDeviceName) :
 
         if (!connectionDone) {
             sleep(NEXT_CONNECTION_WAIT_SECS);
-            if (tries++ == MAX_CONNECTIONS_TRIED) {
+            if (++tries == MAX_CONNECTIONS_TRIED) {
                 tries = 0;
                 if (!getNextClient()) {
                     qInfo("No more clients to test, there is not UPS");
