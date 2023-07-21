@@ -7,19 +7,14 @@
 #include "upscontroller.h"
 
 
-UPS_CLIENT UpsController::tryNextClient(){
+bool UpsController::getNextClient(){
 
-    UPS_CLIENT r = UPS_CLIENT::NUT;
-
-    switch (ups_client) {
-    case UPS_CLIENT::NUT:
-        r = UPS_CLIENT::MODBUS;
-        break;
-    case MODBUS:
-        r = UPS_CLIENT::NUT;
-        break;
+    bool ok = false;
+    size_t l = sizeof(available_clients) / sizeof(UPS_CLIENT);
+    if (++current_client < l) {
+        ok = true;
     }
-    return r;
+    return ok;
 }
 
 UpsController::UpsController(QObject *parent, const QString &upsDeviceName) :
@@ -31,44 +26,41 @@ UpsController::UpsController(QObject *parent, const QString &upsDeviceName) :
     bool connectionDone = false;
     int tries = 0;
 
-    ups_client = UPS_CLIENT::NUT;
+    ups_client = available_clients[0]; // get first client
     qDebug() << "Check available drivers";
     while (!connectionDone)
     {
-        switch (ups_client) {
-        case UPS_CLIENT::NUT:
+        switch (available_clients[current_client]) {
+        case NUT:
             try {
                 m_nutClient = new nut::TcpClient("localhost", 3493);
                 qInfo("NUT client connected");
-                try {
-                    QString test = QString::fromStdString(m_nutClient->getDeviceVariableValue(upsDeviceName.toStdString(), "ups.status")[0]);
-                    qDebug() << "Nut driver test: " << test;
-                    if (test.contains("DRIVER-NOT-CONNECTED")) {
-                        connectionDone = false;
-                    }
+
+                QString test = QString::fromStdString(m_nutClient->getDeviceVariableValue(upsDeviceName.toStdString(), "ups.status")[0]);
+                qDebug() << "Nut driver test: " << test;
+                if (test.contains("DRIVER-NOT-CONNECTED")) {
+                    qWarning() << "Nut driver not connected";
+                    //connectionDone = false;
+                } else {
                     connectionDone = true;
-                } catch (nut::NutException e) {
-                    qWarning() << "Nut driver test fail" << QString::fromStdString(e.str());
-                    connectionDone = false;
-                    return;
                 }
             } catch (nut::NutException e) {
                 qWarning() << "Nut driver error while new class. Details: " << QString::fromStdString(e.str());
-                connectionDone = false;
+                //connectionDone = false;
             }
             if (connectionDone) {
                 try {
                     m_nutClient->authenticate("admin", "admin");
                     connectionDone = true;
-                } catch (nut::NutException e) {
+                } catch (nut::NutException e)                                               {
                     qWarning() << "Nut driver error while authenticate. Details: " << QString::fromStdString(e.str());
                     m_nutClient->logout();
-                    connectionDone = false;
+                    //connectionDone = false;
                 }
             }
             break;
 
-        case UPS_CLIENT::MODBUS:
+        case MODBUS:
             modbusDevice = new QModbusRtuSerialMaster(this);
             modbusDevice->setConnectionParameter(QModbusDevice::SerialPortNameParameter, "/dev/ttyUSB0");
             modbusDevice->setConnectionParameter(QModbusDevice::SerialParityParameter, QSerialPort::MarkParity);
@@ -92,17 +84,22 @@ UpsController::UpsController(QObject *parent, const QString &upsDeviceName) :
 
         if (!connectionDone) {
             sleep(NEXT_CONNECTION_WAIT_SECS);
-            if (tries++ >> MAX_CONNECTIONS_TRIED) {
+            if (tries++ > MAX_CONNECTIONS_TRIED) {
                 tries = 0;
-                ups_client = tryNextClient();
-                qDebug() << "max tries reached, trying client " << ups_client;
+                if (!getNextClient()) {
+                    //connectionDone = false;
+                    break;
+                }
+                qDebug() << "max tries reached, trying next client (" << ups_client << ")";
             }
         }
     }
 
 #endif
-    connect(&m_pollSaiStatusTimer, &QTimer::timeout, this, &UpsController::sendUpsCommand);
-    m_pollSaiStatusTimer.start(1000);
+    if (connectionDone){
+        connect(&m_pollSaiStatusTimer, &QTimer::timeout, this, &UpsController::sendUpsCommand);
+        m_pollSaiStatusTimer.start(1000);
+    }
 }
 
 
@@ -122,11 +119,12 @@ void UpsController::sendUpsCommand()
 {
     static bool waitingForUpsOnline = false;
     QString upsState = "";
+    QModbusDataUnit pdu;
 
 #ifdef UPS_ENABLE
 
-    switch (ups_client) {
-    case UPS_CLIENT::NUT:
+    switch (available_clients[current_client]) {
+    case NUT:
         try {
             upsState = QString::fromStdString(m_nutClient->getDeviceVariableValue(upsDeviceName.toStdString(), "ups.status")[0]);
         } catch (nut::NutException e) {
@@ -149,8 +147,8 @@ void UpsController::sendUpsCommand()
         emit newUpsState(upsState);
         break;
 
-    case UPS_CLIENT::MODBUS:
-        QModbusDataUnit pdu = QModbusDataUnit(QModbusDataUnit::RegisterType::HoldingRegisters, MB_REG_ALARM, 1);
+    case MODBUS:
+        pdu = QModbusDataUnit(QModbusDataUnit::RegisterType::HoldingRegisters, MB_REG_ALARM, 1);
         if (auto *reply = modbusDevice->sendReadRequest(pdu, MODBUS_SLAVE_ID)) {
             if (!reply->isFinished())
                 connect(reply, &QModbusReply::finished, this, &UpsController::MODBUSresponse);
@@ -170,6 +168,9 @@ void UpsController::sendUpsCommand()
         } else {
             qWarning() << "MODBUS Read error (battery): " << modbusDevice->errorString();
         }
+        break;
+    default:
+        // do nothing
         break;
     }
 #endif
@@ -206,7 +207,6 @@ void UpsController::MODBUSresponse() {
                                         .arg(QString::number(unit.value(i), unit.registerType() <= QModbusDataUnit::Coils ? 10 : 16));
                 qDebug() << "MODBUS: " << entry;
             }
-            (1 & (num >> (n - 1)))
             //*/
             batlvl = unit.value(0);
             minleft = unit.value(2)/60;

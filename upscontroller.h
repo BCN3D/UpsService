@@ -29,14 +29,15 @@
 #define MB_ALARM_AC_BIT 14
 
 
-
 class QModbusClient;
 class QModbusReply;
 
 enum UPS_CLIENT {
+    NONE = 0,
     NUT = 1,
     MODBUS
 };
+
 
 class UpsController : public QObject
 {
@@ -67,8 +68,10 @@ private:
     QModbusReply *lastRequest = nullptr;
     void OnlineRT3();
 
+    UPS_CLIENT available_clients[2] = { UPS_CLIENT::NUT, UPS_CLIENT::MODBUS };
     UPS_CLIENT ups_client;
-    UPS_CLIENT tryNextClient();
+    size_t current_client;
+    bool getNextClient();
 };
 
 #endif // UPSCONTROLLER_H
