@@ -45,7 +45,7 @@ bool UpsController::checkMODBUSPort() {
             }
         }
     } else {
-        qDebug() << "No serial ports available";
+        qWarning() << "No serial ports available";
     }
     return ok;
 }
@@ -59,10 +59,11 @@ UpsController::UpsController(QObject *parent, const QString &upsDeviceName) :
     bool connectionDone = false;
     int tries = 0;
 
-    ups_client = available_clients[0]; // get first client
     qInfo() << "Checking available drivers";
+    ups_client = available_clients[current_client]; // get first client
     while (!connectionDone)
     {
+        qDebug() << "testing client " << available_clients[current_client];
         switch (available_clients[current_client]) {
         case NUT:
             try {

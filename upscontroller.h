@@ -34,7 +34,7 @@ class QModbusReply;
 
 enum UPS_CLIENT {
     NONE = 0,
-    NUT = 1,
+    NUT,
     MODBUS
 };
 
@@ -67,8 +67,8 @@ private:
     QModbusReply *lastRequest = nullptr;
 
     UPS_CLIENT available_clients[2] = { UPS_CLIENT::NUT, UPS_CLIENT::MODBUS };
-    UPS_CLIENT ups_client;
-    size_t current_client;
+    UPS_CLIENT ups_client = UPS_CLIENT::NONE;
+    size_t current_client = 0;
 
     bool getNextClient();
     bool checkMODBUSPort();
