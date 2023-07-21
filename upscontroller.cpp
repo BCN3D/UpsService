@@ -35,7 +35,8 @@ bool UpsController::checkMODBUSPort() {
             modbusDevice->setConnectionParameter(QModbusDevice::SerialBaudRateParameter, QSerialPort::Baud19200);
             modbusDevice->setConnectionParameter(QModbusDevice::SerialDataBitsParameter, QSerialPort::Data8);
             modbusDevice->setConnectionParameter(QModbusDevice::SerialStopBitsParameter, QSerialPort::OneStop);
-
+            modbusDevice->setTimeout(200); // milliseconds
+            modbusDevice->setNumberOfRetries(1);
             if (modbusDevice->connectDevice()) {
                 if (onlineRT3()) { // Send the online command to SAI RT3 (in case it is in bypass)
                     ok = true;
@@ -108,7 +109,7 @@ UpsController::UpsController(QObject *parent, const QString &upsDeviceName) :
 
         if (!connectionDone) {
             sleep(NEXT_CONNECTION_WAIT_SECS);
-            if (tries++ > MAX_CONNECTIONS_TRIED) {
+            if (tries++ == MAX_CONNECTIONS_TRIED) {
                 tries = 0;
                 if (!getNextClient()) {
                     qDebug("No more clients to test");
@@ -123,6 +124,7 @@ UpsController::UpsController(QObject *parent, const QString &upsDeviceName) :
     if (connectionDone){
         connect(&m_pollSaiStatusTimer, &QTimer::timeout, this, &UpsController::sendUpsCommand);
         m_pollSaiStatusTimer.start(1000);
+        qDebug("Connection done!");
     }
 }
 
@@ -135,11 +137,12 @@ bool UpsController::onlineRT3() {
     QModbusDataUnit pdu = QModbusDataUnit(QModbusDataUnit::RegisterType::HoldingRegisters, MB_REG_ONLINE, 0);
     auto *reply = modbusDevice->sendReadRequest(pdu, MODBUS_SLAVE_ID);
     while (!reply->isFinished()) { // wait for it...
+        qDebug() << "waiting reply from RT3 online...";
         usleep(100000);
-        qDebug() << "waiting RT3 online...";
     }
     ok = (reply->error() == QModbusDevice::NoError);
     delete reply;
+    qDebug() << "SAI RT3 Online: " << ok;
 
     return ok;
 }
