@@ -24,7 +24,7 @@ bool UpsController::checkMODBUSPort() {
     bool ok = false;
 
     qDebug() << "checkMODBUSPort()";
-    if (numports > 1) {
+    if (numports > 0) {
 
         for (const QSerialPortInfo &portInfo : serialPortInfos) {
 
@@ -38,10 +38,15 @@ bool UpsController::checkMODBUSPort() {
             modbusDevice->setTimeout(200); // milliseconds
             modbusDevice->setNumberOfRetries(1);
             if (modbusDevice->connectDevice()) {
+
+                ok = true;
+                break;
+                /*
                 if (onlineRT3()) { // Send the online command to SAI RT3 (in case it is in bypass)
                     ok = true;
                     break;
                 }
+                */
             }
         }
     } else {
@@ -133,13 +138,20 @@ bool UpsController::onlineRT3() {
     bool ok = false;
 
     QModbusDataUnit pdu = QModbusDataUnit(QModbusDataUnit::RegisterType::HoldingRegisters, MB_REG_ONLINE, 0);
-    auto *reply = modbusDevice->sendReadRequest(pdu, MODBUS_SLAVE_ID);
-    while (!reply->isFinished()) { // wait for it...
-        qDebug() << "waiting reply from RT3 online...";
-        usleep(100000);
+    waiting_modbus_request   = true;
+    modbus_request_completed = false;
+    if (auto *reply = modbusDevice->sendWriteRequest(pdu, MODBUS_SLAVE_ID)) {
+        if (!reply->isFinished())
+            connect(reply, &QModbusReply::finished, this, &UpsController::MODBUSresponse);
+        else
+            delete reply; // broadcast replies return immediately
+    } else {
+        qWarning() << "MODBUS Read error (alarm): " << modbusDevice->errorString();
     }
-    ok = (reply->error() == QModbusDevice::NoError);
-    delete reply;
+    while (waiting_modbus_request) {
+        usleep(100000);
+        qDebug() << "waiting for request completion";
+    }
     qDebug() << "SAI RT3 Online: " << ok;
 
     return ok;
@@ -212,6 +224,8 @@ void UpsController::MODBUSresponse() {
 
     QString upsState = "";
 
+    qDebug() << "MODBUSresponse";
+
     auto reply = qobject_cast<QModbusReply *>(sender());
     if (!reply)
         return;
@@ -244,6 +258,11 @@ void UpsController::MODBUSresponse() {
             upsState = QString(" battery level: %1%  (minutes left: %2)").arg(batlvl).arg(minleft);
             break;
 
+        case MB_REG_ONLINE:
+            qDebug() << "MB_REG_ONLINE completed";
+            modbus_request_completed = true;
+            break;
+
         default:
             // ignore response
             upsState = "";
@@ -260,6 +279,8 @@ void UpsController::MODBUSresponse() {
                           .arg(reply->error(), -1, 16);
     }
     reply->deleteLater();
+
+    waiting_modbus_request = false;
     if (upsState.length() > 1) {
         qInfo() << "MODBUS newUpsState: " << upsState;
         emit newUpsState(upsState);

@@ -65,6 +65,8 @@ private:
     QModbusDataUnit readRequest() const;
     QModbusDataUnit writeRequest() const;
     QModbusReply *lastRequest = nullptr;
+    bool waiting_modbus_request = false;
+    bool modbus_request_completed = false;
 
     UPS_CLIENT available_clients[2] = { UPS_CLIENT::NUT, UPS_CLIENT::MODBUS };
     UPS_CLIENT ups_client = UPS_CLIENT::NONE;
