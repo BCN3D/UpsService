@@ -60,25 +60,23 @@ UpsController::UpsController(QObject *parent, const QString &upsDeviceName) :
     int tries = 0;
 
     ups_client = available_clients[0]; // get first client
-    qDebug() << "Check available drivers";
+    qInfo() << "Checking available drivers";
     while (!connectionDone)
     {
         switch (available_clients[current_client]) {
         case NUT:
             try {
                 m_nutClient = new nut::TcpClient("localhost", 3493);
-                qInfo("NUT client connected");
-
                 QString test = QString::fromStdString(m_nutClient->getDeviceVariableValue(upsDeviceName.toStdString(), "ups.status")[0]);
                 qDebug() << "Nut driver test: " << test;
                 if (test.contains("DRIVER-NOT-CONNECTED")) {
                     qWarning() << "Nut driver not connected";
                 } else {
+                    qInfo("NUT client connected");
                     connectionDone = true;
                 }
             } catch (nut::NutException e) {
                 qWarning() << "Nut driver error: " << QString::fromStdString(e.str());
-                connectionDone = false;
             }
             if (connectionDone) {
                 try {
@@ -93,7 +91,6 @@ UpsController::UpsController(QObject *parent, const QString &upsDeviceName) :
             break;
 
         case MODBUS:
-
             if (checkMODBUSPort()) {
                 qInfo("MODBUS client connected");
                 connectionDone = true;
@@ -112,10 +109,10 @@ UpsController::UpsController(QObject *parent, const QString &upsDeviceName) :
             if (tries++ == MAX_CONNECTIONS_TRIED) {
                 tries = 0;
                 if (!getNextClient()) {
-                    qDebug("No more clients to test");
+                    qInfo("No more clients to test, there is not UPS");
                     break;
                 }
-                qDebug() << "max tries reached, trying next client (" << ups_client << ")";
+                qInfo() << "max tries reached, trying next client (" << ups_client << ")";
             }
         }
     }
