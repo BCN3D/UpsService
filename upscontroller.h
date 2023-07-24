@@ -80,6 +80,8 @@ private:
 
     bool connectionDone = false;
     UPS_STATE ups_state = UPS_STATE::OUT;
+    QString stateName(UPS_STATE state);
+    void changeState(UPS_STATE newstate);
 
     UPS_CLIENT available_clients[2] = { UPS_CLIENT::MODBUS, UPS_CLIENT::NUT };
     UPS_CLIENT ups_client = UPS_CLIENT::NONE;

@@ -13,13 +13,13 @@ UpsController::UpsController(QObject *parent, const QString &upsDeviceName) :
     upsDeviceName(upsDeviceName)
 {
 
-    qDebug() << "**************** Test RC15";
+    qDebug() << "**************** Test RC16";
 
 #ifdef UPS_ENABLE
 
     qInfo() << "starting UpsController...";
     ups_client = available_clients[current_client]; // get first client
-    ups_state = UPS_STATE::TEST_CONNECTION;
+    changeState(UPS_STATE::TEST_CONNECTION);
 
     doWork();
 #endif
@@ -75,7 +75,7 @@ void UpsController::doWork() {
 
     switch (ups_state) {
     case UPS_STATE::TEST_CONNECTION:
-        qDebug() << "S: TEST_CONNECTION (client: " << ups_client << " try #" << connection_tries + 1 << "of" << MAX_CONNECTIONS_TRIED <<  ")";
+        qDebug() << QString("S: TEST_CONNECTION (client: %1 try #%2 of %3").arg(ups_client).arg(connection_tries + 1).arg(MAX_CONNECTIONS_TRIED);
         connect_client();
         if (!connectionDone) {
             sleep(NEXT_CONNECTION_WAIT_SECS);
@@ -83,25 +83,25 @@ void UpsController::doWork() {
                 connection_tries = 0;
                 if (!getNextClient()) {
                     qInfo("No more clients to test, there is not UPS");
-                    ups_state = UPS_STATE::ERROR;
+                    changeState(UPS_STATE::ERROR);
                 }
                 qInfo() << "max tries reached, trying next client (" << ups_client << ")";
             }
         } else {
-            ups_state = UPS_STATE::TEST_OK;
+            changeState(UPS_STATE::TEST_OK);
         }
         break;
 
     case UPS_STATE::TEST_OK:
         qDebug() << "S: TEST_OK";
-        ups_state = CHECK;
+        changeState(UPS_STATE::CHECK);
         connect(&m_pollSaiStatusTimer, &QTimer::timeout, this, &UpsController::sendUpsCommand);
         m_pollSaiStatusTimer.start(1000);
+        break;
 
     case UPS_STATE::CHECK:
         qDebug() << "S: CHECK";
         //sendUpsCommand();
-        ups_state = UPS_STATE::WAITING;
         break;
 
     case UPS_STATE::WAITING:
@@ -138,7 +138,7 @@ void UpsController::connect_client() {
             } else {
                 qInfo("NUT client connected");
                 m_nutClient->authenticate("admin", "admin");
-                ups_state = UPS_STATE::TEST_OK;
+                changeState(UPS_STATE::TEST_OK);
                 connectionDone = true;
             }
         } catch (nut::NutException e) {
@@ -149,6 +149,7 @@ void UpsController::connect_client() {
 
     case MODBUS:
         if (!checkMODBUSPort()) {
+            connectionDone = false;
             doWork();
         }
         break;
@@ -193,6 +194,11 @@ void UpsController::sendUpsCommand()
     QModbusDataUnit pdu;
 
 #ifdef UPS_ENABLE
+
+    if (ups_state == UPS_STATE::WAITING) {
+        qDebug() << "sendUpsCommand UPS_STATE::WAITING";
+        return;
+    }
 
     switch (available_clients[current_client]) {
     case NUT:
@@ -245,6 +251,15 @@ void UpsController::sendUpsCommand()
             qWarning() << "MODBUS Read error (battery): " << modbusDevice->errorString();
             connectionDone = false;
         }
+
+        switch (ups_state) {
+        case UPS_STATE::CHECK:
+            changeState(UPS_STATE::WAITING);
+            break;
+        default:
+            break;
+        }
+
         break;
     default:
         // do nothing
@@ -253,6 +268,25 @@ void UpsController::sendUpsCommand()
 #endif
 }
 
+QString UpsController::stateName(UPS_STATE state){
+
+    QString r = "unknown";
+
+    switch (state) {
+    case UPS_STATE::OUT:             r = "OUT"; break;
+    case UPS_STATE::TEST_CONNECTION: r = "TEST_CONNECTION"; break;
+    case UPS_STATE::TEST_OK:         r = "TEST_OK"; break;
+    case UPS_STATE::CHECK:           r = "CHECK"; break;
+    case UPS_STATE::WAITING:         r = "WAITING"; break;
+    case UPS_STATE::ERROR:           r = "ERROR"; break;
+    }
+    return r;
+}
+
+void UpsController::changeState(UPS_STATE newstate) {
+    qDebug() << QString("state change from %1 to %2").arg(stateName(ups_state)).arg(stateName(newstate));
+    ups_state = newstate;
+}
 
 void UpsController::MODBUSresponse() {
 
@@ -265,9 +299,17 @@ void UpsController::MODBUSresponse() {
 
     if (reply->error() == QModbusDevice::NoError) {
 
-        qDebug() << "MODBUS reply OK (" << mb_portname << ")";
-        if (ups_state == UPS_STATE::TEST_CONNECTION) {
-            ups_state = UPS_STATE::TEST_OK;
+        qDebug() << QString("MODBUS reply OK (%1, state: %2").arg(mb_portname).arg(stateName(ups_state));
+        switch (ups_state) {
+        case UPS_STATE::TEST_CONNECTION:
+            changeState(UPS_STATE::TEST_OK);
+            doWork();
+            break;
+        case UPS_STATE::WAITING:
+            changeState(UPS_STATE::CHECK);
+            break;
+        default:
+            break;
         }
         connectionDone = true;
 
