@@ -76,6 +76,7 @@ private:
     QModbusReply *lastRequest = nullptr;
     bool waiting_modbus_request = false;
     bool modbus_request_completed = false;
+    QString mb_portname = "";
 
     bool connectionDone = false;
     UPS_STATE ups_state = UPS_STATE::OUT;
