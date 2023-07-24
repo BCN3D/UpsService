@@ -60,6 +60,8 @@ UpsController::UpsController(QObject *parent, const QString &upsDeviceName) :
     upsDeviceName(upsDeviceName)
 {
 
+    qDebug() << "**************** Test RC12";
+
 #ifdef UPS_ENABLE
     bool connectionDone = false;
     int tries = 0;
