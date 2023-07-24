@@ -74,16 +74,16 @@ UpsController::UpsController(QObject *parent, const QString &upsDeviceName) :
             try {
                 m_nutClient = new nut::TcpClient("localhost", 3493);
                 QString test = QString::fromStdString(m_nutClient->getDeviceVariableValue(upsDeviceName.toStdString(), "ups.status")[0]);
-                qDebug() << "Nut driver test: " << test;
+                qDebug() << "NUT driver test: " << test;
                 if (test.contains("DRIVER-NOT-CONNECTED")) {
-                    qWarning() << "Nut driver not connected";
+                    qWarning() << "NUT driver not connected";
                 } else {
                     qInfo("NUT client connected");
                     m_nutClient->authenticate("admin", "admin");
                     connectionDone = true;
                 }
             } catch (nut::NutException e) {
-                qWarning() << "Nut driver error: " << QString::fromStdString(e.str());
+                qWarning() << "NUT driver error: " << QString::fromStdString(e.str());
             }
             break;
 
