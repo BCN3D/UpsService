@@ -7,6 +7,25 @@
 #include <qserialportinfo.h>
 #include "upscontroller.h"
 
+
+UpsController::UpsController(QObject *parent, const QString &upsDeviceName) :
+    QObject(parent),
+    upsDeviceName(upsDeviceName)
+{
+
+    qDebug() << "**************** Test RC14";
+
+#ifdef UPS_ENABLE
+
+    qInfo() << "starting UpsController...";
+    ups_client = available_clients[current_client]; // get first client
+    ups_state = UPS_STATE::TEST_CONNECTION;
+
+    doWork();
+#endif
+}
+
+
 bool UpsController::getNextClient(){
 
     bool ok = false;
@@ -21,7 +40,7 @@ bool UpsController::checkMODBUSPort() {
 
     const auto serialPortInfos = QSerialPortInfo::availablePorts();
     const size_t numports = serialPortInfos.length();
-    bool ok = false;
+    bool ok = true;
 
     qDebug() << "checkMODBUSPort()";
     if (numports > 0) {
@@ -35,92 +54,107 @@ bool UpsController::checkMODBUSPort() {
             modbusDevice->setConnectionParameter(QModbusDevice::SerialBaudRateParameter, QSerialPort::Baud19200);
             modbusDevice->setConnectionParameter(QModbusDevice::SerialDataBitsParameter, QSerialPort::Data8);
             modbusDevice->setConnectionParameter(QModbusDevice::SerialStopBitsParameter, QSerialPort::OneStop);
-            modbusDevice->setTimeout(200); // milliseconds
+            modbusDevice->setTimeout(1000); // milliseconds
             modbusDevice->setNumberOfRetries(1);
             if (modbusDevice->connectDevice()) {
 
-                ok = true;
-                break;
-                /*
-                if (onlineRT3()) { // Send the online command to SAI RT3 (in case it is in bypass)
-                    ok = true;
-                    break;
-                }
-                */
+                qDebug() << "device connected";
+                sendUpsCommand();
             }
         }
     } else {
         qWarning() << "No serial ports available";
+        ok = false;
     }
     return ok;
 }
 
-UpsController::UpsController(QObject *parent, const QString &upsDeviceName) :
-    QObject(parent),
-    upsDeviceName(upsDeviceName)
-{
 
-    qDebug() << "**************** Test RC12";
+void UpsController::doWork() {
 
-#ifdef UPS_ENABLE
-    bool connectionDone = false;
-    int tries = 0;
-
-    qInfo() << "Checking available drivers";
-    ups_client = available_clients[current_client]; // get first client
-    while (!connectionDone)
-    {
-        qDebug() << "testing client " << available_clients[current_client];
-        switch (available_clients[current_client]) {
-        case NUT:
-            try {
-                m_nutClient = new nut::TcpClient("localhost", 3493);
-                QString test = QString::fromStdString(m_nutClient->getDeviceVariableValue(upsDeviceName.toStdString(), "ups.status")[0]);
-                qDebug() << "NUT driver test: " << test;
-                if (test.contains("DRIVER-NOT-CONNECTED")) {
-                    qWarning() << "NUT driver not connected";
-                } else {
-                    qInfo("NUT client connected");
-                    m_nutClient->authenticate("admin", "admin");
-                    connectionDone = true;
-                }
-            } catch (nut::NutException e) {
-                qWarning() << "NUT driver error: " << QString::fromStdString(e.str());
-            }
-            break;
-
-        case MODBUS:
-            if (checkMODBUSPort()) {
-                qInfo("MODBUS client connected");
-                connectionDone = true;
-            } else {
-                qWarning() << "MODBUS connection fail";
-            }
-            break;
-
-        default:
-            qWarning("UNKNOWN UPS CLIENT!");
-            break;
-        }
-
+    switch (ups_state) {
+    case UPS_STATE::TEST_CONNECTION:
+        qDebug() << "S: TEST_CONNECTION (client: " << ups_client << " try #" << connection_tries << "/" << MAX_CONNECTIONS_TRIED <<  ")";
+        connect_client();
         if (!connectionDone) {
             sleep(NEXT_CONNECTION_WAIT_SECS);
-            if (++tries == MAX_CONNECTIONS_TRIED) {
-                tries = 0;
+            if (++connection_tries == MAX_CONNECTIONS_TRIED) {
+                connection_tries = 0;
                 if (!getNextClient()) {
                     qInfo("No more clients to test, there is not UPS");
-                    break;
+                    ups_state = UPS_STATE::ERROR;
                 }
                 qInfo() << "max tries reached, trying next client (" << ups_client << ")";
             }
+        } else {
+            ups_state = UPS_STATE::TEST_OK;
         }
-    }
+        break;
 
-#endif
-    if (connectionDone){
+    case UPS_STATE::TEST_OK:
+        qDebug() << "S: TEST_OK";
+        ups_state = CHECK;
         connect(&m_pollSaiStatusTimer, &QTimer::timeout, this, &UpsController::sendUpsCommand);
         m_pollSaiStatusTimer.start(1000);
-        qDebug("Connection done!");
+
+    case UPS_STATE::CHECK:
+        qDebug() << "S: CHECK";
+        //sendUpsCommand();
+        ups_state = UPS_STATE::WAITING;
+        break;
+
+    case UPS_STATE::WAITING:
+        qDebug() << "S: WAITING";
+        // do nothing
+        usleep(10000);
+        break;
+
+    case UPS_STATE::ERROR:
+        qDebug() << "S: ERROR";
+        break;
+
+    default:
+        qDebug() << "S: ??? " << ups_state;
+        // do nothing
+        usleep(10000);
+        doWork();
+        break;
+    }
+}
+
+
+void UpsController::connect_client() {
+
+    qDebug() << "testing client " << available_clients[current_client];
+    switch (available_clients[current_client]) {
+    case NUT:
+        try {
+            m_nutClient = new nut::TcpClient("localhost", 3493);
+            QString test = QString::fromStdString(m_nutClient->getDeviceVariableValue(upsDeviceName.toStdString(), "ups.status")[0]);
+            qDebug() << "NUT driver test: " << test;
+            if (test.contains("DRIVER-NOT-CONNECTED")) {
+                qWarning() << "NUT driver not connected";
+            } else {
+                qInfo("NUT client connected");
+                m_nutClient->authenticate("admin", "admin");
+                ups_state = UPS_STATE::TEST_OK;
+                connectionDone = true;
+            }
+        } catch (nut::NutException e) {
+            qWarning() << "NUT driver error: " << QString::fromStdString(e.str());
+        }
+        doWork();
+        break;
+
+    case MODBUS:
+        if (!checkMODBUSPort()) {
+            doWork();
+        }
+        break;
+
+    default:
+        qWarning("UNKNOWN UPS CLIENT!");
+        break;
     }
 }
 
@@ -173,6 +207,7 @@ void UpsController::sendUpsCommand()
             try {
                 m_nutClient->executeDeviceCommand(upsDeviceName.toStdString(), "load.on"); // Be sure that the UPS is online mode!
                 waitingForUpsOnline = true;
+                connectionDone = true;
             } catch (nut::NutException e) {
                 qWarning() << "Nut driver error while setting UPS online mode. Details: " << QString::fromStdString(e.str());
             }
@@ -192,6 +227,7 @@ void UpsController::sendUpsCommand()
                 delete reply; // broadcast replies return immediately
         } else {
             qWarning() << "MODBUS Read error (alarm): " << modbusDevice->errorString();
+            connectionDone = false;
         }
 
         // Read battery registers
@@ -203,6 +239,7 @@ void UpsController::sendUpsCommand()
                 delete reply; // broadcast replies return immediately
         } else {
             qWarning() << "MODBUS Read error (battery): " << modbusDevice->errorString();
+            connectionDone = false;
         }
         break;
     default:
@@ -216,6 +253,7 @@ void UpsController::sendUpsCommand()
 void UpsController::MODBUSresponse() {
 
     QString upsState = "";
+    connectionDone = false;
 
     qDebug() << "MODBUSresponse";
 
@@ -224,6 +262,13 @@ void UpsController::MODBUSresponse() {
         return;
 
     if (reply->error() == QModbusDevice::NoError) {
+
+        qDebug() << "MODBUS reply OK";
+        if (ups_state == UPS_STATE::TEST_CONNECTION) {
+            ups_state = UPS_STATE::TEST_OK;
+        }
+        connectionDone = true;
+
         const QModbusDataUnit unit = reply->result();
         int batlvl = 0;
         int minleft = 0;
@@ -250,12 +295,12 @@ void UpsController::MODBUSresponse() {
             minleft = unit.value(2)/60;
             upsState = QString(" battery level: %1%  (minutes left: %2)").arg(batlvl).arg(minleft);
             break;
-
+/*
         case MB_REG_ONLINE:
             qDebug() << "MB_REG_ONLINE completed";
-            modbus_request_completed = true;
+            modbus_state = ONLINE_OK;
             break;
-
+*/
         default:
             // ignore response
             upsState = "";
@@ -273,9 +318,9 @@ void UpsController::MODBUSresponse() {
     }
     reply->deleteLater();
 
-    waiting_modbus_request = false;
     if (upsState.length() > 1) {
         qInfo() << "MODBUS newUpsState: " << upsState;
         emit newUpsState(upsState);
     }
+    doWork();
 }

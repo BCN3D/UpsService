@@ -27,9 +27,7 @@ UpsService::UpsService(const QString& configPath, const QString &upsDeviceName, 
     }
 
     // Forward driver signals
-
     connect(m_upsController, &UpsController::newUpsState, [=](const QString &upsState) { emit newUpsState(upsState); });
-
 }
 
 void UpsService::handleQuitSignal()
