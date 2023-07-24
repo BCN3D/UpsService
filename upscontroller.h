@@ -68,7 +68,7 @@ private:
     bool waiting_modbus_request = false;
     bool modbus_request_completed = false;
 
-    UPS_CLIENT available_clients[2] = { UPS_CLIENT::NUT, UPS_CLIENT::MODBUS };
+    UPS_CLIENT available_clients[2] = { UPS_CLIENT::MODBUS, UPS_CLIENT::NUT };
     UPS_CLIENT ups_client = UPS_CLIENT::NONE;
     size_t current_client = 0;
 
