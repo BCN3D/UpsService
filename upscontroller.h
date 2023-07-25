@@ -10,8 +10,10 @@
 
 #include "nutclient.h"
 //#include "serialmanager/serialportwatcher.h"
+#include <qserialportinfo.h>
 #include <QModbusRtuSerialMaster>
 #include <QModbusDataUnit>
+
 
 #define UPS_ENABLE
 
@@ -82,7 +84,10 @@ private:
 
     UPS_STATE ups_state = UPS_STATE::OUT;
     UPS_CLIENT available_clients[2] = { UPS_CLIENT::MODBUS, UPS_CLIENT::NUT };
-    size_t current_client = 0; // get first client
+    int current_client = 0; // get first client
+    QList<QSerialPortInfo> available_ports;
+    int current_port = 0;
+
     int connection_tries = 0;
 
     void connect_client();

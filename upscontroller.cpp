@@ -4,7 +4,6 @@
 #include <QDateTime>
 #include <unistd.h>
 #include "qserialport.h"
-#include <qserialportinfo.h>
 #include "upscontroller.h"
 
 
@@ -13,12 +12,13 @@ UpsController::UpsController(QObject *parent, const QString &upsDeviceName) :
     upsDeviceName(upsDeviceName)
 {
 
-    qDebug() << "**************** Test RC17";
+    qDebug() << "**************** Test RC18";
 
 #ifdef UPS_ENABLE
 
     qInfo() << "starting UpsController...";
 
+    available_ports = QSerialPortInfo::availablePorts();
     //available_clients[current_client] // check that current_client points to the first item
     changeState(UPS_STATE::TEST_CONNECTION);
     doWork();
@@ -32,45 +32,6 @@ bool UpsController::getNextClient(){
     size_t l = sizeof(available_clients) / sizeof(UPS_CLIENT);
     if (++current_client < l) {
         ok = true;
-    }
-    return ok;
-}
-
-
-bool UpsController::checkMODBUSPort() {
-
-    const auto serialPortInfos = QSerialPortInfo::availablePorts();
-    const size_t numports = serialPortInfos.length();
-    bool ok = true;
-
-    qDebug() << "checkMODBUSPort()";
-    if (numports > 0) {
-
-        for (const QSerialPortInfo &portInfo : serialPortInfos) {
-
-            if (ups_state != UPS_STATE::WAITING) {
-                mb_portname = portInfo.portName();
-                qDebug() << "trying MODBUS on port " << mb_portname;
-                modbusDevice = new QModbusRtuSerialMaster(this);
-                modbusDevice->setConnectionParameter(QModbusDevice::SerialPortNameParameter, portInfo.portName());
-                modbusDevice->setConnectionParameter(QModbusDevice::SerialParityParameter, QSerialPort::MarkParity);
-                modbusDevice->setConnectionParameter(QModbusDevice::SerialBaudRateParameter, QSerialPort::Baud19200);
-                modbusDevice->setConnectionParameter(QModbusDevice::SerialDataBitsParameter, QSerialPort::Data8);
-                modbusDevice->setConnectionParameter(QModbusDevice::SerialStopBitsParameter, QSerialPort::OneStop);
-                modbusDevice->setTimeout(2000); // milliseconds
-                modbusDevice->setNumberOfRetries(1);
-                if (modbusDevice->connectDevice()) {
-
-                    qDebug() << "device connected";
-                    MBtestRequest();
-                }
-            }
-            usleep(100000);
-        }
-    } else {
-        qWarning() << "No serial ports available";
-        changeState(UPS_STATE::TEST_FAIL);
-        ok = false;
     }
     return ok;
 }
@@ -174,6 +135,45 @@ void UpsController::connect_client() {
 }
 
 
+bool UpsController::checkMODBUSPort() {
+
+    //const auto serialPortInfos = QSerialPortInfo::availablePorts();
+    //const size_t numports = serialPortInfos.length();
+    bool ok = true;
+
+    qDebug() << "checkMODBUSPort()";
+    if (current_port < available_ports.length()) {
+
+        QSerialPortInfo &portInfo = available_ports[current_port];
+        //for (const QSerialPortInfo &portInfo : serialPortInfos) {
+        //if (ups_state != UPS_STATE::WAITING) {
+            mb_portname = portInfo.portName();
+            qDebug() << "trying MODBUS on port " << mb_portname;
+            modbusDevice = new QModbusRtuSerialMaster(this);
+            modbusDevice->setConnectionParameter(QModbusDevice::SerialPortNameParameter, portInfo.portName());
+            modbusDevice->setConnectionParameter(QModbusDevice::SerialParityParameter, QSerialPort::MarkParity);
+            modbusDevice->setConnectionParameter(QModbusDevice::SerialBaudRateParameter, QSerialPort::Baud19200);
+            modbusDevice->setConnectionParameter(QModbusDevice::SerialDataBitsParameter, QSerialPort::Data8);
+            modbusDevice->setConnectionParameter(QModbusDevice::SerialStopBitsParameter, QSerialPort::OneStop);
+            modbusDevice->setTimeout(2000); // milliseconds
+            modbusDevice->setNumberOfRetries(1);
+            if (modbusDevice->connectDevice()) {
+
+                qDebug() << "device connected";
+                MBtestRequest();
+            }
+        //}
+        //usleep(100000);
+        //}
+    } else {
+        qWarning() << "No serial ports available";
+        changeState(UPS_STATE::TEST_FAIL);
+        ok = false;
+    }
+    return ok;
+}
+
+
 void UpsController::MBtestRequest() {
 
     qDebug() << "MBtestRequest (" << mb_portname << ")";
@@ -194,7 +194,7 @@ void UpsController::MBtestRequest() {
 void UpsController::MBtestResponse() {
 
     qDebug() << "MBtestResponse (" << mb_portname << ")";
-    UPS_STATE newUpsState = UPS_STATE::TEST_FAIL;
+    UPS_STATE newUpsState = UPS_STATE::TEST_CONNECTION;
     auto reply = qobject_cast<QModbusReply *>(sender());
     if (!reply)
         return;
@@ -216,6 +216,9 @@ void UpsController::MBtestResponse() {
                           .arg(mb_portname);
     }
 
+    if (newUpsState != UPS_STATE::TEST_OK) {
+        current_port++;
+    }
     changeState(newUpsState);
     reply->deleteLater();
     doWork();
@@ -342,7 +345,7 @@ void UpsController::changeState(UPS_STATE newstate) {
 
 void UpsController::MODBUSresponse() {
 
-    QString upsState = "";
+    QString upsState = "OB: OFF";
     auto reply = qobject_cast<QModbusReply *>(sender());
     if (!reply)
         return;
