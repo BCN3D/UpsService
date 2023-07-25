@@ -42,6 +42,7 @@ enum UPS_STATE {
     OUT = 0,
     TEST_CONNECTION,
     TEST_OK,
+    TEST_FAIL,
     CHECK,
     WAITING,
     ERROR
@@ -61,6 +62,9 @@ public slots:
     void sendUpsCommand();
     void MODBUSresponse();
 
+    void MBtestRequest();
+    void MBtestResponse();
+
 protected slots:
 
 protected:
@@ -74,18 +78,11 @@ private:
     QModbusDataUnit readRequest() const;
     QModbusDataUnit writeRequest() const;
     QModbusReply *lastRequest = nullptr;
-    bool waiting_modbus_request = false;
-    bool modbus_request_completed = false;
     QString mb_portname = "";
 
-    bool connectionDone = false;
     UPS_STATE ups_state = UPS_STATE::OUT;
-    QString stateName(UPS_STATE state);
-    void changeState(UPS_STATE newstate);
-
     UPS_CLIENT available_clients[2] = { UPS_CLIENT::MODBUS, UPS_CLIENT::NUT };
-    UPS_CLIENT ups_client = UPS_CLIENT::NONE;
-    size_t current_client = 0;
+    size_t current_client = 0; // get first client
     int connection_tries = 0;
 
     void connect_client();
@@ -94,7 +91,8 @@ private:
     bool getNextClient();
     bool checkMODBUSPort();
     bool onlineRT3();
-
+    QString stateName(UPS_STATE state);
+    void changeState(UPS_STATE newstate);
 };
 
 #endif // UPSCONTROLLER_H

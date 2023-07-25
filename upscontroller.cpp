@@ -13,14 +13,14 @@ UpsController::UpsController(QObject *parent, const QString &upsDeviceName) :
     upsDeviceName(upsDeviceName)
 {
 
-    qDebug() << "**************** Test RC16";
+    qDebug() << "**************** Test RC17";
 
 #ifdef UPS_ENABLE
 
     qInfo() << "starting UpsController...";
-    ups_client = available_clients[current_client]; // get first client
-    changeState(UPS_STATE::TEST_CONNECTION);
 
+    //available_clients[current_client] // check that current_client points to the first item
+    changeState(UPS_STATE::TEST_CONNECTION);
     doWork();
 #endif
 }
@@ -36,6 +36,7 @@ bool UpsController::getNextClient(){
     return ok;
 }
 
+
 bool UpsController::checkMODBUSPort() {
 
     const auto serialPortInfos = QSerialPortInfo::availablePorts();
@@ -47,24 +48,28 @@ bool UpsController::checkMODBUSPort() {
 
         for (const QSerialPortInfo &portInfo : serialPortInfos) {
 
-            mb_portname = portInfo.portName();
-            qDebug() << "trying MODBUS on port " << mb_portname;
-            modbusDevice = new QModbusRtuSerialMaster(this);
-            modbusDevice->setConnectionParameter(QModbusDevice::SerialPortNameParameter, portInfo.portName());
-            modbusDevice->setConnectionParameter(QModbusDevice::SerialParityParameter, QSerialPort::MarkParity);
-            modbusDevice->setConnectionParameter(QModbusDevice::SerialBaudRateParameter, QSerialPort::Baud19200);
-            modbusDevice->setConnectionParameter(QModbusDevice::SerialDataBitsParameter, QSerialPort::Data8);
-            modbusDevice->setConnectionParameter(QModbusDevice::SerialStopBitsParameter, QSerialPort::OneStop);
-            modbusDevice->setTimeout(2000); // milliseconds
-            modbusDevice->setNumberOfRetries(1);
-            if (modbusDevice->connectDevice()) {
+            if (ups_state != UPS_STATE::WAITING) {
+                mb_portname = portInfo.portName();
+                qDebug() << "trying MODBUS on port " << mb_portname;
+                modbusDevice = new QModbusRtuSerialMaster(this);
+                modbusDevice->setConnectionParameter(QModbusDevice::SerialPortNameParameter, portInfo.portName());
+                modbusDevice->setConnectionParameter(QModbusDevice::SerialParityParameter, QSerialPort::MarkParity);
+                modbusDevice->setConnectionParameter(QModbusDevice::SerialBaudRateParameter, QSerialPort::Baud19200);
+                modbusDevice->setConnectionParameter(QModbusDevice::SerialDataBitsParameter, QSerialPort::Data8);
+                modbusDevice->setConnectionParameter(QModbusDevice::SerialStopBitsParameter, QSerialPort::OneStop);
+                modbusDevice->setTimeout(2000); // milliseconds
+                modbusDevice->setNumberOfRetries(1);
+                if (modbusDevice->connectDevice()) {
 
-                qDebug() << "device connected";
-                sendUpsCommand();
+                    qDebug() << "device connected";
+                    MBtestRequest();
+                }
             }
+            usleep(100000);
         }
     } else {
         qWarning() << "No serial ports available";
+        changeState(UPS_STATE::TEST_FAIL);
         ok = false;
     }
     return ok;
@@ -73,22 +78,30 @@ bool UpsController::checkMODBUSPort() {
 
 void UpsController::doWork() {
 
+    qDebug() << QString("dowork(%1)").arg(stateName(ups_state));
     switch (ups_state) {
     case UPS_STATE::TEST_CONNECTION:
-        qDebug() << QString("S: TEST_CONNECTION (client: %1 try #%2 of %3").arg(ups_client).arg(connection_tries + 1).arg(MAX_CONNECTIONS_TRIED);
+        qDebug() << QString("client: %1 try #%2 of %3").arg(available_clients[current_client]).arg(connection_tries + 1).arg(MAX_CONNECTIONS_TRIED);
         connect_client();
-        if (!connectionDone) {
-            sleep(NEXT_CONNECTION_WAIT_SECS);
-            if (++connection_tries == MAX_CONNECTIONS_TRIED) {
-                connection_tries = 0;
-                if (!getNextClient()) {
-                    qInfo("No more clients to test, there is not UPS");
-                    changeState(UPS_STATE::ERROR);
-                }
-                qInfo() << "max tries reached, trying next client (" << ups_client << ")";
+        break;
+
+    case UPS_STATE::TEST_FAIL:
+        sleep(NEXT_CONNECTION_WAIT_SECS);
+        if (++connection_tries == MAX_CONNECTIONS_TRIED) {
+            connection_tries = 0;
+            if (getNextClient()) {
+                qInfo() << "max tries reached, trying next client (" << available_clients[current_client] << ")";
+                changeState(UPS_STATE::TEST_CONNECTION);
+                doWork();
+            } else {
+                qInfo("No more clients to test, there is not UPS");
+                changeState(UPS_STATE::ERROR);
+
+                // QUIT ???
             }
         } else {
-            changeState(UPS_STATE::TEST_OK);
+            changeState(UPS_STATE::TEST_CONNECTION);
+            doWork();
         }
         break;
 
@@ -135,21 +148,21 @@ void UpsController::connect_client() {
             qDebug() << "NUT driver test: " << test;
             if (test.contains("DRIVER-NOT-CONNECTED")) {
                 qWarning() << "NUT driver not connected";
+                changeState(UPS_STATE::TEST_FAIL);
             } else {
                 qInfo("NUT client connected");
                 m_nutClient->authenticate("admin", "admin");
                 changeState(UPS_STATE::TEST_OK);
-                connectionDone = true;
             }
         } catch (nut::NutException e) {
             qWarning() << "NUT driver error: " << QString::fromStdString(e.str());
+            changeState(UPS_STATE::TEST_FAIL);
         }
         doWork();
         break;
 
     case MODBUS:
         if (!checkMODBUSPort()) {
-            connectionDone = false;
             doWork();
         }
         break;
@@ -161,14 +174,60 @@ void UpsController::connect_client() {
 }
 
 
+void UpsController::MBtestRequest() {
+
+    qDebug() << "MBtestRequest (" << mb_portname << ")";
+    changeState(UPS_STATE::WAITING);
+    QModbusDataUnit pdu = QModbusDataUnit(QModbusDataUnit::RegisterType::HoldingRegisters, MB_REG_ALARM, 1);
+    if (auto *reply = modbusDevice->sendReadRequest(pdu, MODBUS_SLAVE_ID)) {
+        if (!reply->isFinished())
+            connect(reply, &QModbusReply::finished, this, &UpsController::MBtestResponse);
+        else
+            delete reply; // broadcast replies return immediately
+    } else {
+        qWarning() << "MODBUS Read error (test alarm): " << modbusDevice->errorString();
+        changeState(UPS_STATE::TEST_FAIL);
+    }
+}
+
+
+void UpsController::MBtestResponse() {
+
+    qDebug() << "MBtestResponse (" << mb_portname << ")";
+    UPS_STATE newUpsState = UPS_STATE::TEST_FAIL;
+    auto reply = qobject_cast<QModbusReply *>(sender());
+    if (!reply)
+        return;
+
+    if (reply->error() == QModbusDevice::NoError) {
+
+        qDebug() << QString("MODBUS test reply OK (%1, state: %2").arg(mb_portname).arg(stateName(ups_state));
+        newUpsState = UPS_STATE::TEST_OK;
+
+    } else if (reply->error() == QModbusDevice::ProtocolError) {
+        qWarning() << QString("Test read response error: %1 (MODBUS exception: 0x%2 from %3)")
+                          .arg(reply->errorString())
+                          .arg(reply->rawResult().exceptionCode(), -1, 16)
+                          .arg(mb_portname);
+    } else {
+        qWarning() << QString("Test read response error: %1 (code: 0x%2) from %3")
+                          .arg(reply->errorString())
+                          .arg(reply->error(), -1, 16)
+                          .arg(mb_portname);
+    }
+
+    changeState(newUpsState);
+    reply->deleteLater();
+    doWork();
+}
+
+
 bool UpsController::onlineRT3() {
 
     qDebug() << "SAI RT3 Online";
     bool ok = false;
 
     QModbusDataUnit pdu = QModbusDataUnit(QModbusDataUnit::RegisterType::HoldingRegisters, MB_REG_ONLINE, 0);
-    waiting_modbus_request   = true;
-    modbus_request_completed = false;
     if (auto *reply = modbusDevice->sendWriteRequest(pdu, MODBUS_SLAVE_ID)) {
         if (!reply->isFinished())
             connect(reply, &QModbusReply::finished, this, &UpsController::MODBUSresponse);
@@ -176,10 +235,6 @@ bool UpsController::onlineRT3() {
             delete reply; // broadcast replies return immediately
     } else {
         qWarning() << "MODBUS Read error (alarm): " << modbusDevice->errorString();
-    }
-    while (waiting_modbus_request) {
-        usleep(100000);
-        qDebug() << "waiting for request completion";
     }
     qDebug() << "SAI RT3 Online: " << ok;
 
@@ -209,12 +264,10 @@ void UpsController::sendUpsCommand()
             return;
         }
         qDebug() << upsState;
-
         if (upsState.contains("BYPASS") && !waitingForUpsOnline) {
             try {
                 m_nutClient->executeDeviceCommand(upsDeviceName.toStdString(), "load.on"); // Be sure that the UPS is online mode!
                 waitingForUpsOnline = true;
-                connectionDone = true;
             } catch (nut::NutException e) {
                 qWarning() << "Nut driver error while setting UPS online mode. Details: " << QString::fromStdString(e.str());
             }
@@ -229,15 +282,15 @@ void UpsController::sendUpsCommand()
 
         qDebug() << "sendUpsCommand MODBUS (" << mb_portname << ")";
 
+        // Read alarm registers
         pdu = QModbusDataUnit(QModbusDataUnit::RegisterType::HoldingRegisters, MB_REG_ALARM, 1);
         if (auto *reply = modbusDevice->sendReadRequest(pdu, MODBUS_SLAVE_ID)) {
             if (!reply->isFinished())
                 connect(reply, &QModbusReply::finished, this, &UpsController::MODBUSresponse);
             else
-                delete reply; // broadcast replies return immediately
+                delete reply;
         } else {
             qWarning() << "MODBUS Read error (alarm): " << modbusDevice->errorString();
-            connectionDone = false;
         }
 
         // Read battery registers
@@ -246,10 +299,9 @@ void UpsController::sendUpsCommand()
             if (!reply->isFinished())
                 connect(reply, &QModbusReply::finished, this, &UpsController::MODBUSresponse);
             else
-                delete reply; // broadcast replies return immediately
+                delete reply;
         } else {
             qWarning() << "MODBUS Read error (battery): " << modbusDevice->errorString();
-            connectionDone = false;
         }
 
         switch (ups_state) {
@@ -259,7 +311,6 @@ void UpsController::sendUpsCommand()
         default:
             break;
         }
-
         break;
     default:
         // do nothing
@@ -268,7 +319,7 @@ void UpsController::sendUpsCommand()
 #endif
 }
 
-QString UpsController::stateName(UPS_STATE state){
+QString UpsController::stateName(UPS_STATE state) {
 
     QString r = "unknown";
 
@@ -276,6 +327,7 @@ QString UpsController::stateName(UPS_STATE state){
     case UPS_STATE::OUT:             r = "OUT"; break;
     case UPS_STATE::TEST_CONNECTION: r = "TEST_CONNECTION"; break;
     case UPS_STATE::TEST_OK:         r = "TEST_OK"; break;
+    case UPS_STATE::TEST_FAIL:       r = "TEST_FAIL"; break;
     case UPS_STATE::CHECK:           r = "CHECK"; break;
     case UPS_STATE::WAITING:         r = "WAITING"; break;
     case UPS_STATE::ERROR:           r = "ERROR"; break;
@@ -291,8 +343,6 @@ void UpsController::changeState(UPS_STATE newstate) {
 void UpsController::MODBUSresponse() {
 
     QString upsState = "";
-    connectionDone = false;
-
     auto reply = qobject_cast<QModbusReply *>(sender());
     if (!reply)
         return;
@@ -311,7 +361,6 @@ void UpsController::MODBUSresponse() {
         default:
             break;
         }
-        connectionDone = true;
 
         const QModbusDataUnit unit = reply->result();
         int batlvl = 0;
