@@ -1,4 +1,4 @@
-#ifndef UPSCONTROLLER_H
+﻿#ifndef UPSCONTROLLER_H
 #define UPSCONTROLLER_H
 
 #include <QObject>
@@ -76,15 +76,12 @@ private:
     QTimer m_pollSaiStatusTimer;
     QString upsDeviceName;
 
-    QModbusClient *modbusDevice = nullptr;
-    QModbusDataUnit readRequest() const;
-    QModbusDataUnit writeRequest() const;
-    QModbusReply *lastRequest = nullptr;
-    QString mb_portname = "";
-
     UPS_STATE ups_state = UPS_STATE::OUT;
     UPS_CLIENT available_clients[2] = { UPS_CLIENT::MODBUS, UPS_CLIENT::NUT };
-    int current_client = 0; // get first client
+    size_t current_client = 0; // get first client
+
+    QModbusClient *modbusDevice = nullptr;
+    QString mb_portname = "";
     QList<QSerialPortInfo> available_ports;
     int current_port = 0;
 
@@ -95,7 +92,7 @@ private:
 
     bool getNextClient();
     bool checkMODBUSPort();
-    bool onlineRT3();
+    void onlineRT3();
     QString stateName(UPS_STATE state);
     void changeState(UPS_STATE newstate);
 };

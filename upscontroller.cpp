@@ -11,9 +11,6 @@ UpsController::UpsController(QObject *parent, const QString &upsDeviceName) :
     QObject(parent),
     upsDeviceName(upsDeviceName)
 {
-
-    qDebug() << "**************** Test RC18";
-
 #ifdef UPS_ENABLE
 
     qInfo() << "starting UpsController...";
@@ -167,16 +164,19 @@ void UpsController::MBtestRequest() {
 
     //qDebug() << "MBtestRequest (" << mb_portname << ")";
     changeState(UPS_STATE::WAITING);
-    QModbusDataUnit pdu = QModbusDataUnit(QModbusDataUnit::RegisterType::HoldingRegisters, MB_REG_ALARM, 1);
-    if (auto *reply = modbusDevice->sendReadRequest(pdu, MODBUS_SLAVE_ID)) {
+
+    // the test request also puts the UPS online
+    QModbusDataUnit pdu = QModbusDataUnit(QModbusDataUnit::RegisterType::HoldingRegisters, MB_REG_ONLINE, 2);
+    if (auto *reply = modbusDevice->sendWriteRequest(pdu, MODBUS_SLAVE_ID)) {
         if (!reply->isFinished())
             connect(reply, &QModbusReply::finished, this, &UpsController::MBtestResponse);
         else
             delete reply; // broadcast replies return immediately
     } else {
-        qWarning() << "MODBUS Read error (test alarm): " << modbusDevice->errorString();
+        qWarning() << "MODBUS Read error (online): " << modbusDevice->errorString();
         changeState(UPS_STATE::TEST_FAIL);
     }
+
 }
 
 
@@ -211,26 +211,6 @@ void UpsController::MBtestResponse() {
     changeState(newUpsState);
     reply->deleteLater();
     doWork();
-}
-
-
-bool UpsController::onlineRT3() {
-
-    qDebug() << "SAI RT3 Online";
-    bool ok = false;
-
-    QModbusDataUnit pdu = QModbusDataUnit(QModbusDataUnit::RegisterType::HoldingRegisters, MB_REG_ONLINE, 0);
-    if (auto *reply = modbusDevice->sendWriteRequest(pdu, MODBUS_SLAVE_ID)) {
-        if (!reply->isFinished())
-            connect(reply, &QModbusReply::finished, this, &UpsController::MODBUSresponse);
-        else
-            delete reply; // broadcast replies return immediately
-    } else {
-        qWarning() << "MODBUS Read error (alarm): " << modbusDevice->errorString();
-    }
-    qDebug() << "SAI RT3 Online: " << ok;
-
-    return ok;
 }
 
 
