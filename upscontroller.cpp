@@ -36,7 +36,7 @@ bool UpsController::getNextClient(){
 
 void UpsController::doWork() {
 
-    qDebug() << QString("dowork(%1)").arg(stateName(ups_state));
+    //qDebug() << QString("dowork(%1)").arg(stateName(ups_state));
     switch (ups_state) {
     case UPS_STATE::TEST_CONNECTION:
         qDebug() << QString("client: %1 try #%2 of %3").arg(available_clients[current_client]).arg(connection_tries + 1).arg(MAX_CONNECTIONS_TRIED);
@@ -321,7 +321,7 @@ void UpsController::MODBUSresponse() {
 
     if (reply->error() == QModbusDevice::NoError) {
 
-        qDebug() << QString("MODBUS reply OK (%1, state: %2").arg(mb_portname).arg(stateName(ups_state));
+        //qDebug() << QString("MODBUS reply OK (%1, state: %2").arg(mb_portname).arg(stateName(ups_state));
         switch (ups_state) {
         case UPS_STATE::TEST_CONNECTION:
             changeState(UPS_STATE::TEST_OK);
