@@ -22,7 +22,7 @@
 #define MODBUS_SLAVE_ID 1
 
 #define MB_SLAVE = 0x01
-#define MB_PORT = "/dev/ttyUSB0"
+#define MB_PORT = "/dev/ttySAI"
 
 #define MB_REG_ALARM    5
 #define MB_REG_BATTERY 64

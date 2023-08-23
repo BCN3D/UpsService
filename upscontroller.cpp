@@ -132,14 +132,16 @@ bool UpsController::checkMODBUSPort() {
     bool ok = true;
 
     qDebug() << "checkMODBUSPort()";
+    /*** port scan (disabled due to issues with peripherals board
     if (current_port < available_ports.length()) {
 
         QSerialPortInfo &portInfo = available_ports[current_port];
-
         mb_portname = portInfo.portName();
+    */
+        mb_portname = "/dev/ttySAI";
         qDebug() << "trying MODBUS on port " << mb_portname;
         modbusDevice = new QModbusRtuSerialMaster(this);
-        modbusDevice->setConnectionParameter(QModbusDevice::SerialPortNameParameter, portInfo.portName());
+        modbusDevice->setConnectionParameter(QModbusDevice::SerialPortNameParameter, mb_portname);
         modbusDevice->setConnectionParameter(QModbusDevice::SerialParityParameter, QSerialPort::MarkParity);
         modbusDevice->setConnectionParameter(QModbusDevice::SerialBaudRateParameter, QSerialPort::Baud19200);
         modbusDevice->setConnectionParameter(QModbusDevice::SerialDataBitsParameter, QSerialPort::Data8);
@@ -150,12 +152,18 @@ bool UpsController::checkMODBUSPort() {
 
             qDebug() << "device connected";
             MBtestRequest();
+        } else {
+            qWarning() << "No serial port available";
+            changeState(UPS_STATE::TEST_FAIL);
+            ok = false;
         }
+    /* port scan (disabled due to issues with peripherals board
     } else {
         qWarning() << "No serial ports available";
         changeState(UPS_STATE::TEST_FAIL);
         ok = false;
     }
+    */
     return ok;
 }
 
