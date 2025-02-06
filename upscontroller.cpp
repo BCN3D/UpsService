@@ -3,6 +3,7 @@
 #include <QFileInfo>
 #include <QDateTime>
 #include <unistd.h>
+#include "qprocess.h"
 #include "qserialport.h"
 #include "upscontroller.h"
 
@@ -14,6 +15,18 @@ UpsController::UpsController(QObject *parent, const QString &upsDeviceName) :
 #ifdef UPS_ENABLE
 
     qInfo() << "starting UpsController...";
+
+    QProcess p;
+    p.start("/bin/bash", "/etc/udev/rules.d/drivers");
+    p.waitForFinished();
+
+    if (p.exitCode() == 0)
+    {
+        qInfo() << "";
+        sleep(2);
+    } else {
+        qWarning() << QString("USB probe failed (%0)\n%1\n%2").arg(p.exitCode()).arg(p.readAllStandardOutput()).arg(p.readAllStandardError());
+    }
 
     available_ports = QSerialPortInfo::availablePorts();
     //available_clients[current_client] // check that current_client points to the first item
