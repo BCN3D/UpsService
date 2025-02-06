@@ -36,6 +36,7 @@ UpsController::UpsController(QObject *parent, const QString &upsDeviceName) :
 }
 
 
+
 bool UpsController::getNextClient(){
 
     bool ok = false;
