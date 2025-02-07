@@ -18,7 +18,7 @@ UpsController::UpsController(QObject *parent, const QString &upsDeviceName) :
     qInfo() << "starting UpsController...";
 
     QProcess p;
-    p.start("/bin/bash", "/etc/udev/rules.d/drivers");
+    p.start("/bin/bash", {"/etc/udev/rules.d/drivers"}, QIODevice::OpenModeFlag::ReadOnly);
     p.waitForFinished();
 
     if (p.exitCode() == 0)
@@ -26,7 +26,7 @@ UpsController::UpsController(QObject *parent, const QString &upsDeviceName) :
         qInfo() << "";
         sleep(2);
     } else {
-        qWarning() << QString("USB probe failed (%0)\n%1\n%2").arg(p.exitCode()).arg(p.readAllStandardOutput()).arg(p.readAllStandardError());
+        qWarning() << "USB probe failed (" << p.exitCode() << ") " << p.readAllStandardError() << p.readAllStandardError();
     }
 
     available_ports = QSerialPortInfo::availablePorts();
@@ -254,7 +254,7 @@ void UpsController::sendUpsCommand()
     case NUT:
         try {
             upsState = QString::fromStdString(m_nutClient->getDeviceVariableValue(upsDeviceName.toStdString(), "ups.status")[0]);
-        } catch (nut::NutException e) {
+        } catch (std::exception e) {
             qWarning() << "Nut driver error while requesting ups data. Details: " << QString::fromStdString(e.str());
             return;
         }
@@ -263,7 +263,7 @@ void UpsController::sendUpsCommand()
             try {
                 m_nutClient->executeDeviceCommand(upsDeviceName.toStdString(), "load.on"); // Be sure that the UPS is online mode!
                 waitingForUpsOnline = true;
-            } catch (nut::NutException e) {
+            } catch (std::exception e) {
                 qWarning() << "Nut driver error while setting UPS online mode. Details: " << QString::fromStdString(e.str());
             }
         } else if (upsState == "OL" && waitingForUpsOnline) {
