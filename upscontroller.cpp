@@ -5,6 +5,7 @@
 #include <unistd.h>
 #include "qprocess.h"
 #include "qserialport.h"
+#include <QIODevice>
 #include "upscontroller.h"
 
 
