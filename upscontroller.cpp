@@ -18,7 +18,7 @@ UpsController::UpsController(QObject *parent, const QString &upsDeviceName) :
     qInfo() << "starting UpsController...";
 
     QProcess p;
-    p.start("/bin/bash", "/etc/udev/rules.d/drivers");
+    p.start("/bin/bash", {"/etc/udev/rules.d/drivers"}, QIODevice::OpenModeFlag::ReadOnly);
     p.waitForFinished();
 
     if (p.exitCode() == 0)
