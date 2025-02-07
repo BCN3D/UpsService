@@ -23,7 +23,7 @@ UpsController::UpsController(QObject *parent, const QString &upsDeviceName) :
 
     if (p.exitCode() == 0)
     {
-        qInfo() << "";
+        qInfo() << "drivers loaded";
         sleep(2);
     } else {
         qWarning() << "USB probe failed (" << p.exitCode() << ") " << p.readAllStandardError() << p.readAllStandardError();
