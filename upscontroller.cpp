@@ -255,7 +255,7 @@ void UpsController::sendUpsCommand()
         try {
             upsState = QString::fromStdString(m_nutClient->getDeviceVariableValue(upsDeviceName.toStdString(), "ups.status")[0]);
         } catch (std::exception e) {
-            qWarning() << "Nut driver error while requesting ups data. Details: " << QString::fromStdString(e.str());
+            qWarning() << "Nut driver error while requesting ups data. Details: " << QString::fromStdString(e.what());
             return;
         }
         //qDebug() << upsState;
@@ -264,7 +264,7 @@ void UpsController::sendUpsCommand()
                 m_nutClient->executeDeviceCommand(upsDeviceName.toStdString(), "load.on"); // Be sure that the UPS is online mode!
                 waitingForUpsOnline = true;
             } catch (std::exception e) {
-                qWarning() << "Nut driver error while setting UPS online mode. Details: " << QString::fromStdString(e.str());
+                qWarning() << "Nut driver error while setting UPS online mode. Details: " << QString::fromStdString(e.what());
             }
         } else if (upsState == "OL" && waitingForUpsOnline) {
             waitingForUpsOnline = false;
