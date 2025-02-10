@@ -13,8 +13,6 @@ UpsController::UpsController(QObject *parent, const QString &upsDeviceName) :
     QObject(parent),
     upsDeviceName(upsDeviceName)
 {
-#ifdef UPS_ENABLE
-
     qInfo() << "starting UpsController... 1210";
 
     QProcess p;
@@ -23,7 +21,7 @@ UpsController::UpsController(QObject *parent, const QString &upsDeviceName) :
 
     if (p.exitCode() == 0)
     {
-        qInfo() << "";
+        qInfo() << "drivers loaded";
         sleep(2);
     } else {
         qWarning() << "USB probe failed (" << p.exitCode() << ") " << p.readAllStandardError() << p.readAllStandardError();
@@ -33,9 +31,7 @@ UpsController::UpsController(QObject *parent, const QString &upsDeviceName) :
     //available_clients[current_client] // check that current_client points to the first item
     changeState(UPS_STATE::TEST_CONNECTION);
     doWork();
-#endif
 }
-
 
 
 bool UpsController::getNextClient(){
@@ -243,10 +239,8 @@ void UpsController::sendUpsCommand()
     QString upsState = "";
     QModbusDataUnit pdu;
 
-#ifdef UPS_ENABLE
-
     if (ups_state == UPS_STATE::WAITING) {
-        //qDebug() << "sendUpsCommand UPS_STATE::WAITING";
+        qDebug() << "sendUpsCommand UPS_STATE::WAITING";
         return;
     }
 
@@ -313,7 +307,6 @@ void UpsController::sendUpsCommand()
         // do nothing
         break;
     }
-#endif
 }
 
 QString UpsController::stateName(UPS_STATE state) {

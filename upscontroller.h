@@ -15,8 +15,6 @@
 #include <QModbusDataUnit>
 
 
-#define UPS_ENABLE
-
 #define MAX_CONNECTIONS_TRIED 3
 #define NEXT_CONNECTION_WAIT_SECS 1
 #define MODBUS_SLAVE_ID 1
